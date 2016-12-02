@@ -22,6 +22,8 @@ dependencies {
 ```
 
 ## Usage
+
+### demo
 ```java
 boolean vImg = false;//true to vertical demo
 
@@ -38,3 +40,38 @@ recyclerView.setAdapter(sampleCardAdapter);
 cardSnapHelper = new LinearSnapHelper();
 cardSnapHelper.attachToRecyclerView(recyclerView);
 ```
+
+### CardAdapter
+
+#### Constructor
+```java
+public CardAdapter(RecyclerView recyclerView,int visibleCount,int minNap){
+   ...
+}
+```
+**note**:
+
+1. visibleCount: number of visible, not support value 2.
+2. minNap : min value of both padding.(left and right or top and bottom).
+
+
+### CardHolder
+```java
+class SimpleCardHolder extends RecyclerCardView.CardHolder<CardItem> implements RecyclerCardView.OnCenterProximityListener{
+    @Override
+    public void onCenterPosition(boolean animate) {
+        ...
+    }
+
+    @Override
+    public void onNonCenterPosition(boolean animate) {
+        ...
+    }
+}
+```
+
+**note**:
+
+* your CardHolder can implement OnCenterProximityListener and do you animation on onCenterPosition,onNonCenterPosition.
+    
+
