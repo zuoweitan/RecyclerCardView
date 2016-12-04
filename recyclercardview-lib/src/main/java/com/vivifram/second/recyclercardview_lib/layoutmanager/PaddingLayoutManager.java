@@ -1,15 +1,25 @@
 package com.vivifram.second.recyclercardview_lib.layoutmanager;
 
 import android.content.Context;
+import android.graphics.PointF;
+import android.support.v4.widget.ScrollerCompat;
+import android.support.v7.widget.LinearSmoothScroller;
+import android.support.v7.widget.OrientationHelper;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
+import android.util.DisplayMetrics;
+import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.animation.Interpolator;
 
 import java.util.HashSet;
 import java.util.List;
+
+import static android.support.v7.widget.RecyclerView.SCROLL_STATE_IDLE;
 
 /**
  * 项目名称：RecyclerCardView
@@ -20,8 +30,13 @@ import java.util.List;
  * 修改时间：16-11-29 下午4:16
  * 修改备注：
  */
-public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
+public class PaddingLayoutManager extends RecyclerView.LayoutManager implements Runnable{
 
+    private static final String TAG = "PaddingLayoutManager";
+
+    public static final int HORIZONTAL = OrientationHelper.HORIZONTAL;
+
+    public static final int VERTICAL = OrientationHelper.VERTICAL;
 
     private static final int REMOVE_VISIBLE = 0;
     private static final int REMOVE_INVISIBLE = 1;
@@ -30,7 +45,8 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
     private static final int DIRECTION_UP = 1;
     private static final int DIRECTION_DOWN = 2;
 
-    //只支持等高的child
+    //只支持等高或等宽的child
+    private int decoratedChildWidth;
     private int decoratedChildHeight;
 
     private int firstChangedPosition;
@@ -39,12 +55,31 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
     private int firstVisiblePosition;
 
     private int visibleLineCount;
+    private int visibled;
 
-    @Override
-    public RecyclerView.LayoutParams generateDefaultLayoutParams() {
-        return new RecyclerView.LayoutParams(
-                RecyclerView.LayoutParams.WRAP_CONTENT,
-                RecyclerView.LayoutParams.WRAP_CONTENT);
+    private final int scrollDistance;
+
+    int orientation;
+    int maxGap;
+    int startOffset;
+    Context ctx;
+    ScrollerCompat offsetScroller;
+
+    public PaddingLayoutManager(Context context){
+        this(context,2);
+    }
+
+    public PaddingLayoutManager(Context context,int visibled,int orientation){
+        this.visibled = visibled;
+        this.orientation = orientation;
+        ctx = context;
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        scrollDistance = (int) (80 * dm.density + 0.5f);
+        offsetScroller = ScrollerCompat.create(ctx,sQuinticInterpolator);
+    }
+
+    public PaddingLayoutManager(Context context,int visibled){
+        this(context,visibled,VERTICAL);
     }
 
     @Override
@@ -77,7 +112,9 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
             detachAndScrapView(scrap, recycler);
         }
 
-        updateVisibleLineCount();
+        updateVisibleCount();
+
+        updateGap();
 
         SparseIntArray removedCache = null;
 
@@ -103,20 +140,20 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
         int childTop;
         if (getChildCount() == 0) {
             firstVisiblePosition = 0;
-            childTop = getPaddingTop();
+            childTop = getPaddingTop() + startOffset;
         } else if (!state.isPreLayout()
                 && getVisibleChildCount() >= state.getItemCount()){//如果不需要滑动
             firstVisiblePosition = 0;
-            childTop = getPaddingTop();
+            childTop = getPaddingTop() + startOffset;
         } else { //adapter set changed
             final View topChild = getChildAt(0);
             childTop = getDecoratedTop(topChild);
             //这里你有两种特殊情况需要处理
-            //1.如果减少数据集且不足以滑动时,需要将childtop值置0
+            //1.如果减少数据集且不足以滑动时,需要将childtop重置
             //2.如果新的数据集很小但是还是能够滑动时,则需要调整firstVisiblePosition的值。
 
             if (!state.isPreLayout() && state.getItemCount() < getChildCount()){
-                childTop = 0;
+                childTop = getPaddingTop() + startOffset;
             }
 
             int maxLine = state.getItemCount() - (getVisibleChildCount() - 1);
@@ -150,6 +187,7 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
 
     }
 
+
     private void fillLine(int direction, RecyclerView.Recycler recycler, RecyclerView.State state) {
         fillLine(direction, 0, recycler, state, null);
     }
@@ -161,19 +199,11 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
         if (firstVisiblePosition < 0) firstVisiblePosition = 0;
         if (firstVisiblePosition >= getItemCount()) firstVisiblePosition = (getItemCount() - 1);
 
-        SparseArray<View> viewCache = new SparseArray<View>(getChildCount());
+        SparseArray<View> viewCache = new SparseArray<>(getChildCount());
         int startTopOffset = emptyTop;
         if (getChildCount() != 0) {
             final View topView = getChildAt(0);
             startTopOffset = getDecoratedTop(topView);
-            switch (direction) {
-                case DIRECTION_UP:
-                    startTopOffset -= decoratedChildHeight;
-                    break;
-                case DIRECTION_DOWN:
-                    startTopOffset += decoratedChildHeight;
-                    break;
-            }
 
             //Cache all views by their existing position, before updating counts
             for (int i=0; i < getChildCount(); i++) {
@@ -187,19 +217,6 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
             for (int i=0; i < viewCache.size(); i++) {
                 detachView(viewCache.valueAt(i));
             }
-        }
-
-        /*
-         * Next, we advance the visible position based on the fill direction.
-         * DIRECTION_NONE doesn't advance the position in any direction.
-         */
-        switch (direction) {
-            case DIRECTION_UP:
-                firstVisiblePosition -= 1;
-                break;
-            case DIRECTION_DOWN:
-                firstVisiblePosition += 1;
-                break;
         }
 
         /*
@@ -243,6 +260,7 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
 
             //Layout this position
             View view = viewCache.get(nextPosition);
+
             if (view == null) {
                 /*
                  * The Recycler will give us either a newly constructed view,
@@ -278,7 +296,7 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
                 viewCache.remove(nextPosition);
             }
 
-            topOffset += decoratedChildHeight;
+            topOffset += decoratedChildHeight + maxGap;
 
             //During pre-layout, on each column end, apply any additional appearing views
             if (state.isPreLayout()) {
@@ -349,7 +367,7 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
                 layoutTop + decoratedChildHeight);
     }
 
-    private void updateVisibleLineCount() {
+    private void updateVisibleCount() {
 
         visibleLineCount = (getVerticalSpace()/ decoratedChildHeight) + 1;
         if (getVerticalSpace() % decoratedChildHeight > 0) {
@@ -359,11 +377,223 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
         if (visibleLineCount > getItemCount()) {
             visibleLineCount = getItemCount();
         }
+
+        if (visibled > visibleLineCount){
+            visibled = visibleLineCount;
+        }
     }
 
-    private int getTotalChildHeight() {
+    private void updateGap() {
+        if (visibled < visibleLineCount){
+            int t = 0;
+            if (visibled % 2 == 0 || visibled == 1){
+                t = getVerticalSpace() - (visibled * decoratedChildHeight);
+                t /= (visibled + 1);
+                startOffset = t < 0?0:t;
+            }else {
+                t = getVerticalSpace() - ((visibled - 1) * decoratedChildHeight);
+                t /= (visibled - 1);
+                startOffset = -decoratedChildHeight / 2;
+            }
+            maxGap = t < 0?0:t;
+        }else {
+            maxGap = 0;
+        }
+    }
 
-        return 0;
+    private boolean isFitCenter(){
+       return !(visibled % 2 == 0 || visibled == 1);
+    }
+
+
+    @Override
+    public int scrollVerticallyBy(int dy, RecyclerView.Recycler recycler,
+                                  RecyclerView.State state) {
+        if (getChildCount() == 0) {
+            return 0;
+        }
+        int scrolled = 0;
+        final int left = getPaddingLeft();
+        final int right = getWidth() - getPaddingRight();
+        int totalGap = 0;
+        if (dy < 0) {
+            while (scrolled > dy) {
+                final View topView = getChildAt(0);
+                final int hangingTop = Math.max(-getDecoratedTop(topView), 0);
+                final int scrollBy = Math.min(scrolled - dy, hangingTop);
+                scrolled -= scrollBy;
+                offsetChildrenVertical(scrollBy);
+                if (firstVisiblePosition > 0 && scrolled > dy) {
+                    firstVisiblePosition--;
+                    View v = recycler.getViewForPosition(firstVisiblePosition);
+                    addView(v, 0);
+                    measureChildWithMargins(v, 0, 0);
+                    totalGap += maxGap;
+                    final int bottom = getDecoratedTop(topView) - totalGap;
+                    final int top = bottom - getDecoratedMeasuredHeight(v);
+                    layoutDecorated(v, left, top, right, bottom);
+                } else {
+                    break;
+                }
+            }
+        } else if (dy > 0) {
+            final int parentHeight = getHeight();
+            while (scrolled < dy) {
+                final View bottomView = getChildAt(getChildCount() - 1);
+                final int hangingBottom =
+                        Math.max(getDecoratedBottom(bottomView) - parentHeight, 0);
+                final int scrollBy = -Math.min(dy - scrolled, hangingBottom);
+                scrolled -= scrollBy;
+                offsetChildrenVertical(scrollBy);
+                if (scrolled < dy && state.getItemCount() > firstVisiblePosition + getChildCount()) {
+                    View v = recycler.getViewForPosition(firstVisiblePosition + getChildCount());
+                    totalGap += maxGap;
+                    final int top = getDecoratedBottom(getChildAt(getChildCount() - 1)) + totalGap;
+                    addView(v);
+                    measureChildWithMargins(v, 0, 0);
+                    final int bottom = top + getDecoratedMeasuredHeight(v);
+                    layoutDecorated(v, left, top, right, bottom);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        recycleViewsOutOfBounds(recycler);
+        return scrolled;
+    }
+
+    private void recycleViewsOutOfBounds(RecyclerView.Recycler recycler) {
+        final int childCount = getChildCount();
+        final int parentWidth = getWidth();
+        final int parentHeight = getHeight();
+        boolean foundFirst = false;
+        int first = 0;
+        int last = 0;
+        for (int i = 0; i < childCount; i++) {
+            final View v = getChildAt(i);
+            if (v.hasFocus() || (getDecoratedRight(v) >= 0 &&
+                    getDecoratedLeft(v) <= parentWidth &&
+                    getDecoratedBottom(v) >= 0 &&
+                    getDecoratedTop(v) <= parentHeight)) {
+                if (!foundFirst) {
+                    first = i;
+                    foundFirst = true;
+                }
+                last = i;
+            }
+        }
+        for (int i = childCount - 1; i > last; i--) {
+            removeAndRecycleViewAt(i, recycler);
+        }
+        for (int i = first - 1; i >= 0; i--) {
+            removeAndRecycleViewAt(i, recycler);
+        }
+        if (getChildCount() == 0) {
+            firstVisiblePosition = 0;
+        } else {
+            firstVisiblePosition += first;
+        }
+    }
+
+    /*
+   * You must override this method if you would like to support external calls
+   * to shift the view to a given adapter position. In our implementation, this
+   * is the same as doing a fresh layout with the given position as the top-left
+   * (or first visible), so we simply set that value and trigger onLayoutChildren()
+   */
+    @Override
+    public void scrollToPosition(int position) {
+        if (position >= getItemCount()) {
+            Log.e(TAG, "Cannot scroll to "+position+", item count is "+getItemCount());
+            return;
+        }
+
+        //Set requested position as first visible
+        firstVisiblePosition = position;
+        //Toss all existing views away
+        removeAllViews();
+        //Trigger a new view layout
+        requestLayout();
+    }
+
+    /*
+     * You must override this method if you would like to support external calls
+     * to animate a change to a new adapter position. The framework provides a
+     * helper scroller implementation (LinearSmoothScroller), which we leverage
+     * to do the animation calculations.
+     */
+    @Override
+    public void smoothScrollToPosition(RecyclerView recyclerView, RecyclerView.State state, final int position) {
+        if (position >= getItemCount()) {
+            Log.e(TAG, "Cannot scroll to "+position+", item count is "+getItemCount());
+            return;
+        }
+
+        /*
+         * LinearSmoothScroller's default behavior is to scroll the contents until
+         * the child is fully visible. It will snap to the top-left or bottom-right
+         * of the parent depending on whether the direction of travel was positive
+         * or negative.
+         */
+        LinearSmoothScroller scroller = new LinearSmoothScroller(recyclerView.getContext()) {
+            /*
+             * LinearSmoothScroller, at a minimum, just need to know the vector
+             * (x/y distance) to travel in order to get from the current positioning
+             * to the target.
+             */
+            @Override
+            public PointF computeScrollVectorForPosition(int targetPosition) {
+
+                return PaddingLayoutManager.this.computeScrollVectorForPosition(targetPosition);
+            }
+        };
+        scroller.setTargetPosition(position);
+        startSmoothScroll(scroller);
+    }
+
+    public PointF computeScrollVectorForPosition(int targetPosition) {
+        if (getChildCount() == 0) {
+            return null;
+        }
+        if (orientation == HORIZONTAL) {
+            return new PointF(1, 0);
+        } else {
+            return new PointF(0, 1);
+        }
+    }
+
+    @Override
+    public void onScrollStateChanged(int state) {
+        super.onScrollStateChanged(state);
+        if (state == SCROLL_STATE_IDLE){
+            if (getChildCount() > 0){
+                if (!offsetScroller.isFinished()){
+                    offsetScroller.abortAnimation();
+                    removeCallbacks(this);
+                }
+                offsetScroller.startScroll(0,0,0,startOffset, 400);
+                postOnAnimation(this);
+            }
+        }
+    }
+
+    @Override
+    public boolean canScrollVertically() {
+        return orientation == VERTICAL;
+    }
+
+    @Override
+    public boolean canScrollHorizontally() {
+        return orientation == HORIZONTAL;
+    }
+
+    private int getLastVisiblePosition() {
+        return getFirstVisiblePosition() + getVisibleChildCount();
+    }
+
+    private int getFirstVisiblePosition() {
+        return firstVisiblePosition;
     }
 
     private int getVisibleChildCount() {
@@ -376,6 +606,44 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
 
     private int getVerticalSpace() {
         return getHeight() - getPaddingBottom() - getPaddingTop();
+    }
+
+    @Override
+    public RecyclerView.LayoutParams generateDefaultLayoutParams() {
+        return new LayoutParams(
+                RecyclerView.LayoutParams.WRAP_CONTENT,
+                RecyclerView.LayoutParams.WRAP_CONTENT);
+    }
+
+    @Override
+    public RecyclerView.LayoutParams generateLayoutParams(Context c, AttributeSet attrs) {
+        return new LayoutParams(c, attrs);
+    }
+
+    @Override
+    public RecyclerView.LayoutParams generateLayoutParams(ViewGroup.LayoutParams lp) {
+        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            return new LayoutParams((ViewGroup.MarginLayoutParams) lp);
+        } else {
+            return new LayoutParams(lp);
+        }
+    }
+
+    @Override
+    public boolean checkLayoutParams(RecyclerView.LayoutParams lp) {
+        return lp instanceof LayoutParams;
+    }
+
+    @Override
+    public void run() {
+        if (offsetScroller.computeScrollOffset()){
+            View topView = getChildAt(0);
+            int delta = offsetScroller.getCurrY() - getDecoratedTop(topView);
+            offsetChildrenVertical(delta);
+            if (!offsetScroller.isFinished()) {
+                postOnAnimation(this);
+            }
+        }
     }
 
     public static class LayoutParams extends RecyclerView.LayoutParams {
@@ -397,4 +665,11 @@ public class PaddingLinearLayoutManager extends RecyclerView.LayoutManager {
             super(source);
         }
     }
+
+    private static final Interpolator sQuinticInterpolator = new Interpolator() {
+        public float getInterpolation(float t) {
+            t -= 1.0f;
+            return t * t * t * t * t + 1.0f;
+        }
+    };
 }
