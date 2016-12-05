@@ -16,12 +16,9 @@ import android.view.ViewGroup;
 import android.view.animation.Interpolator;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.List;
-
-import static android.R.attr.left;
-import static android.R.attr.right;
-import static android.support.v7.widget.RecyclerView.SCROLL_STATE_IDLE;
 
 /**
  * 项目名称：RecyclerCardView
@@ -50,8 +47,6 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
     //view type
 
     private static int TYPE_NORMAL = 0;
-    private static int TYPE_HEAD = 1;
-    private static int TYPE_FOOTER = 2;
 
     //只支持等高或等宽的child
     private int decoratedChildWidth;
@@ -70,11 +65,9 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
     int orientation;
     int maxGap;
     int startOffset;
+    int firstOffset;
     Context ctx;
     ScrollerCompat offsetScroller;
-
-    View headView;
-    View footerView;
 
     public PaddingLayoutManager(Context context){
         this(context,3);
@@ -127,8 +120,6 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
 
         updateGap();
 
-        initHeadAndFooter();
-
         SparseIntArray removedCache = null;
 
         //在layout之前,监控所有即将被删除的child
@@ -153,11 +144,11 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
         int childTop;
         if (getChildCount() == 0) {
             firstVisiblePosition = 0;
-            childTop = getPaddingTop() + startOffset;
+            childTop = getPaddingTop() + firstOffset;
         } else if (!state.isPreLayout()
                 && getVisibleChildCount() >= state.getItemCount()){//如果不需要滑动
             firstVisiblePosition = 0;
-            childTop = getPaddingTop() + startOffset;
+            childTop = getPaddingTop() + firstOffset;
         } else { //adapter set changed
             final View topChild = getChildAt(0);
             childTop = getDecoratedTop(topChild);
@@ -166,7 +157,7 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
             //2.如果新的数据集很小但是还是能够滑动时,则需要调整firstVisiblePosition的值。
 
             if (!state.isPreLayout() && state.getItemCount() < getChildCount()){
-                childTop = getPaddingTop() + startOffset;
+                childTop = getPaddingTop() + firstOffset;
             }
 
             int maxLine = state.getItemCount() - (getVisibleChildCount() - 1);
@@ -209,13 +200,7 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                           RecyclerView.State state,
                           SparseIntArray removedPositions) {
         if (firstVisiblePosition < 0) firstVisiblePosition = 0;
-        if (firstVisiblePosition >= getItemCount()) {
-            if (firstVisiblePosition == getItemCount()){
-                firstVisiblePosition = getItemCount();
-            }else {
-                firstVisiblePosition = getItemCount() - 1;
-            }
-        }
+        if (firstVisiblePosition >= getItemCount()) firstVisiblePosition = getItemCount() - 1;
 
         SparseArray<View> viewCache = new SparseArray<>(getChildCount());
         int startTopOffset = emptyTop;
@@ -271,7 +256,7 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                 nextPosition = offsetPosition;
             }
 
-            if (nextPosition < 0 || nextPosition > state.getItemCount()) {
+            if (nextPosition < 0 || nextPosition >= state.getItemCount()) {
                 //Item space beyond the data set, don't attempt to add a view
                 continue;
             }
@@ -286,11 +271,7 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                  * view will already be fully bound to the data by the
                  * adapter for us.
                  */
-                if (nextPosition == state.getItemCount()){
-                    view =  footerView;
-                }else {
-                    view = recycler.getViewForPosition(nextPosition);
-                }
+                view = recycler.getViewForPosition(nextPosition);
 
                 addView(view);
 
@@ -413,10 +394,12 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                 t = getVerticalSpace() - (visibled * decoratedChildHeight);
                 t /= (visibled + 1);
                 startOffset = t < 0?0:t;
+                firstOffset = startOffset;
             }else {
                 t = getVerticalSpace() - ((visibled - 1) * decoratedChildHeight);
                 t /= (visibled - 1);
                 startOffset = -decoratedChildHeight / 2;
+                firstOffset = getVerticalSpace() / 2 + startOffset;
             }
             maxGap = t < 0?0:t;
         }else {
@@ -424,25 +407,6 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
         }
     }
 
-    private void initHeadAndFooter() {
-        footerView = new View(ctx);
-        LayoutParams layoutParams = (LayoutParams) generateDefaultLayoutParams();
-        layoutParams.type = TYPE_FOOTER;
-        layoutParams.width = decoratedChildWidth;
-        footerView.setLayoutParams(layoutParams);
-        bindHolder(layoutParams);
-    }
-
-    private void bindHolder(LayoutParams layoutParams) {
-        Class c = layoutParams.getClass().getSuperclass();
-        try {
-            Field mViewHolder = c.getDeclaredField("mViewHolder");
-            mViewHolder.setAccessible(true);
-            mViewHolder.set(layoutParams, new RecyclerView.ViewHolder(footerView){});
-        } catch (Exception e) {
-            Log.e(TAG,"bindHolder e = ",e);
-        }
-    }
 
     private boolean isFitCenter(){
        return !(visibled % 2 == 0 || visibled == 1);
@@ -467,15 +431,18 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                 offsetChildrenVertical(scrollBy);
                 if (firstVisiblePosition > 0 && scrolled > dy) {
                     firstVisiblePosition--;
+
                     View v = recycler.getViewForPosition(firstVisiblePosition);
-                    addView(v, 0);
-                    LayoutParams lp = (LayoutParams) v.getLayoutParams();
-                    lp.line = firstVisiblePosition;
-                    measureChildWithMargins(v, 0, 0);
-                    totalGap += maxGap;
-                    final int bottom = getDecoratedTop(topView) - totalGap;
-                    final int top = bottom - getDecoratedMeasuredHeight(v);
-                    layoutDecorated(v, left, top, right, bottom);
+                    if (v != null) {
+                        addView(v, 0);
+                        LayoutParams lp = (LayoutParams) v.getLayoutParams();
+                        lp.line = firstVisiblePosition;
+                        measureChildWithMargins(v, 0, 0);
+                        totalGap += maxGap;
+                        final int bottom = getDecoratedTop(topView) - totalGap;
+                        final int top = bottom - getDecoratedMeasuredHeight(v);
+                        layoutDecorated(v, left, top, right, bottom);
+                    }
                 } else {
                     break;
                 }
@@ -490,15 +457,9 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                 scrolled -= scrollBy;
                 offsetChildrenVertical(scrollBy);
 
-                if (scrolled < dy && state.getItemCount() >= firstVisiblePosition + getChildCount()) {
-                    View v = null;
-                    if (state.getItemCount() == firstVisiblePosition + getChildCount()){
-                        if (visibled != 1) {
-                            v = footerView;
-                        }
-                    }else {
-                        v = recycler.getViewForPosition(firstVisiblePosition + getChildCount());
-                    }
+                if (scrolled < dy && state.getItemCount() > firstVisiblePosition + getChildCount()) {
+
+                    View v = recycler.getViewForPosition(firstVisiblePosition + getChildCount());
                     if (v != null) {
                         totalGap += maxGap;
                         final int top = getDecoratedBottom(getChildAt(getChildCount() - 1)) + totalGap;
@@ -544,7 +505,6 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
         }
 
         for (int i = childCount - 1; i > last; i--) {
-            Log.i("tests","remove pos = "+((LayoutParams)getChildAt(i).getLayoutParams()).line);
             removeAndRecycleViewAt(i, recycler);
         }
 
@@ -630,17 +590,55 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
     @Override
     public void onScrollStateChanged(int state) {
         super.onScrollStateChanged(state);
-        if (state == SCROLL_STATE_IDLE){
+        if (state == RecyclerView.SCROLL_STATE_IDLE){
             if (getChildCount() > 0){
                 if (!offsetScroller.isFinished()){
                     offsetScroller.abortAnimation();
                     removeCallbacks(this);
                 }
-                int startY = getDecoratedTop(getChildAt(0));
-                offsetScroller.startScroll(0,startY,0,startOffset-startY, 300);
+                View fChild = getChildAt(0);
+                View lChild = getChildAt(getChildCount() - 1);
+                LayoutParams fLayoutParams = (LayoutParams) fChild.getLayoutParams();
+                LayoutParams lLayoutParams = (LayoutParams) lChild.getLayoutParams();
+                int startY = getDecoratedTop(fChild);
+                int dy = 0;
+                if (fLayoutParams.line == 0 && (startY == getPaddingTop() || startY == firstOffset)){
+                    dy = firstOffset - startY;
+                } else if (lLayoutParams.line == getItemCount() &&
+                        (getDecoratedBottom(lChild) == getVerticalSpace()
+                                || getDecoratedBottom(lChild) == getVerticalSpace() - firstOffset)){
+                    dy = -firstOffset - getDecoratedBottom(lChild) + getVerticalSpace();
+                } else {
+                    dy = startOffset - startY;
+                }
+                offsetScroller.startScroll(0,startY,0,dy, computeScrollDuration(0,dy));
                 postOnAnimation(this);
             }
         }
+    }
+
+    private int computeScrollDuration(int dx, int dy) {
+        final int absDx = Math.abs(dx);
+        final int absDy = Math.abs(dy);
+        final boolean horizontal = absDx > absDy;
+        final int delta = (int) Math.sqrt(dx * dx + dy * dy);
+        final int containerSize = horizontal ? getWidth() : getHeight();
+        final int halfContainerSize = containerSize / 2;
+        final float distanceRatio = Math.min(1.f, 1.f * delta / containerSize);
+        final float distance = halfContainerSize + halfContainerSize *
+                distanceInfluenceForSnapDuration(distanceRatio);
+
+        final int duration;
+        float absDelta = (float) (horizontal ? absDx : absDy);
+        duration = (int) (((absDelta / containerSize) + 1) * 300);
+        return Math.min(duration, 2000);
+    }
+
+
+    private float distanceInfluenceForSnapDuration(float f) {
+        f -= 0.5f; // center the values about 0.
+        f *= 0.3f * Math.PI / 2.0f;
+        return (float) Math.sin(f);
     }
 
     @Override
@@ -707,13 +705,52 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
             offsetChildrenVertical(delta);
             View bottom = getChildAt(getChildCount() - 1);
             reAttach(bottom);
-            postOnAnimation(this);
+            if (!offsetScroller.isFinished()) {
+                postOnAnimation(this);
+            }
         }
     }
 
     private void reAttach(View v){
         detachView(v);
-        attachView(v);
+        removeDetachedView(v);
+        eatRequestLayout();
+        addView(v);
+        layoutDecorated(v,getDecoratedLeft(v),getDecoratedTop(v)
+        ,getDecoratedRight(v),getDecoratedBottom(v));
+        resumeRequestLayout();
+    }
+
+    private void eatRequestLayout() {
+        try {
+            Method m = RecyclerView.class.getDeclaredMethod("eatRequestLayout");
+            m.setAccessible(true);
+            m.invoke(getRecyclerView());
+        }catch (Exception e){
+            Log.e(TAG,"eatRequestLayout failed :",e);
+        }
+    }
+
+
+    private void resumeRequestLayout() {
+        try {
+            Method m = RecyclerView.class.getDeclaredMethod("resumeRequestLayout",boolean.class);
+            m.setAccessible(true);
+            m.invoke(getRecyclerView(),false);
+        }catch (Exception e){
+            Log.e(TAG,"resumeRequestLayout failed :",e);
+        }
+    }
+
+
+    private RecyclerView getRecyclerView(){
+        try {
+            Field f = getClass().getSuperclass().getDeclaredField("mRecyclerView");
+            f.setAccessible(true);
+            return (RecyclerView) f.get(this);
+        }catch (Exception e){
+            throw new RuntimeException(e.fillInStackTrace());
+        }
     }
 
     public static class LayoutParams extends RecyclerView.LayoutParams {
