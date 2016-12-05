@@ -602,7 +602,7 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                 LayoutParams lLayoutParams = (LayoutParams) lChild.getLayoutParams();
                 int startY = getDecoratedTop(fChild);
                 int dy = 0;
-                if (fLayoutParams.line == 0 && (startY == getPaddingTop() || startY == firstOffset)){
+                if (fLayoutParams.line == 0 && (startY == getPaddingTop() || startY == firstOffset)){//this works because of firstOffset eq startOffset on other mode.
                     dy = firstOffset - startY;
                 } else if (lLayoutParams.line == getItemCount() &&
                         (getDecoratedBottom(lChild) == getVerticalSpace()
