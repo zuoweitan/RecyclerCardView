@@ -15,6 +15,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Interpolator;
 
+import com.vivifram.second.recyclercardview_lib.OnCenterProximityListener;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashSet;
@@ -67,13 +69,14 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
     int startOffset;
     int firstOffset;
     Context ctx;
+    RecyclerView recyclerView;
     ScrollerCompat offsetScroller;
 
     public PaddingLayoutManager(Context context){
-        this(context,3);
+        this(context,1);
     }
 
-    public PaddingLayoutManager(Context context,int visibled,int orientation){
+    private PaddingLayoutManager(Context context,int visibled,int orientation){
         this.visibled = visibled;
         this.orientation = orientation;
         ctx = context;
@@ -189,6 +192,7 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
             }
         }
 
+        notifyChildrenAboutProximity(false);
     }
 
     private void fillLine(int direction, RecyclerView.Recycler recycler, RecyclerView.State state) {
@@ -316,6 +320,26 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
         for (int i=0; i < viewCache.size(); i++) {
             final View removingView = viewCache.valueAt(i);
             recycler.recycleView(removingView);
+        }
+    }
+
+    private void notifyChildrenAboutProximity(boolean animate) {
+        int count = getChildCount();
+        if (count == 0) return;
+        View centerView = findCenterVerticalView();
+        if (centerView != null){
+            if (getRecyclerView().getChildViewHolder(centerView) instanceof OnCenterProximityListener) {
+                OnCenterProximityListener centerProximityListener;
+                for (int i = 0; i < count; i++) {
+                    View v = getChildAt(i);
+                    centerProximityListener = (OnCenterProximityListener) getRecyclerView().getChildViewHolder(v);
+                    if (v == centerView) {
+                        centerProximityListener.onCenterPosition(animate);
+                    } else {
+                        centerProximityListener.onNonCenterPosition(animate);
+                    }
+                }
+            }
         }
     }
 
@@ -478,6 +502,9 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
         }
 
         recycleViewsOutOfBounds(recycler);
+
+        notifyChildrenAboutProximity(true);
+
         return scrolled;
     }
 
@@ -709,6 +736,7 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
                 postOnAnimation(this);
             }
         }
+        notifyChildrenAboutProximity(false);
     }
 
     private void reAttach(View v){
@@ -742,15 +770,52 @@ public class PaddingLayoutManager extends RecyclerView.LayoutManager implements 
         }
     }
 
-
     private RecyclerView getRecyclerView(){
-        try {
-            Field f = getClass().getSuperclass().getDeclaredField("mRecyclerView");
-            f.setAccessible(true);
-            return (RecyclerView) f.get(this);
-        }catch (Exception e){
-            throw new RuntimeException(e.fillInStackTrace());
+        if (recyclerView == null) {
+            try {
+                Field f = getClass().getSuperclass().getDeclaredField("mRecyclerView");
+                f.setAccessible(true);
+                recyclerView = (RecyclerView) f.get(this);
+            } catch (Exception e) {
+                throw new RuntimeException(e.fillInStackTrace());
+            }
         }
+        return recyclerView;
+    }
+
+    private View findCenterVerticalView(){
+        int childCount = getChildCount();
+        if (childCount == 0) {
+            return null;
+        }
+
+        View closestChild = null;
+        final int center;
+        if (getClipToPadding()) {
+            center = getVerticalSpace() / 2;
+        } else {
+            center = getHeight() / 2;
+        }
+        int absClosest = Integer.MAX_VALUE;
+
+        for (int i = 0; i < childCount; i++) {
+            final View child = getChildAt(i);
+            int childCenter = getDecoratedStart(child) +
+                    decoratedChildHeight / 2;
+            int absDistance = Math.abs(childCenter - center);
+
+            if (absDistance < absClosest) {
+                absClosest = absDistance;
+                closestChild = child;
+            }
+        }
+        return closestChild;
+    }
+
+    private int getDecoratedStart(View child) {
+        final RecyclerView.LayoutParams params = (RecyclerView.LayoutParams)
+                child.getLayoutParams();
+        return getDecoratedTop(child) - params.topMargin;
     }
 
     public static class LayoutParams extends RecyclerView.LayoutParams {

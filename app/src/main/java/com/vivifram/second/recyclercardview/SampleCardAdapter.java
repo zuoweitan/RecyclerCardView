@@ -5,12 +5,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
+import com.vivifram.second.recyclercardview_lib.OnCenterProximityListener;
 import com.vivifram.second.recyclercardview_lib.RecyclerCardView;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static com.vivifram.second.recyclercardview.R.id.vImg;
 
 
 /**
@@ -63,7 +62,7 @@ public class SampleCardAdapter extends com.vivifram.second.recyclercardview_lib.
         return list.size();
     }
 
-    class SimpleCardHolder extends RecyclerCardView.CardHolder<CardItem> implements RecyclerCardView.OnCenterProximityListener{
+    class SimpleCardHolder extends RecyclerCardView.CardHolder<CardItem> implements OnCenterProximityListener {
 
         public ImageView vImg;
         public ImageView hImg;

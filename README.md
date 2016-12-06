@@ -1,7 +1,15 @@
+# RecyclerCardView & PaddingLayoutManager
+both to support auto animate a item to center.
+
+# PaddingLayoutManager
+A vertical LayoutManager only layout specified items with the some Gap.
+
+### Demo
+[](art/p1.gif) [](art/p2.gif) [](art/p3.gif)
+
 # RecyclerCardView
 A vertical/horizonal list with one item on center and others evenly distributed up and down.
 
-# Demo
 ### Vertical
 ![](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/demo_1.gif)
 
@@ -17,7 +25,7 @@ A vertical/horizonal list with one item on center and others evenly distributed 
 ```groovy
 dependencies {
   // jCenter
-  compile 'com.vivifarm.view:RecyclerCardView:1.2.0'
+  compile 'com.vivifarm.view:RecyclerCardView:1.4.0'
 }
 ```
 

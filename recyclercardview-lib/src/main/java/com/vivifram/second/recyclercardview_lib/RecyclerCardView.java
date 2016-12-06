@@ -71,12 +71,6 @@ public class RecyclerCardView extends RecyclerView implements ChildProximityList
         public abstract boolean onFling(int velocityX, int velocityY);
     }
 
-    public interface OnCenterProximityListener {
-        void onCenterPosition(boolean animate);
-
-        void onNonCenterPosition(boolean animate);
-    }
-
     @Override
     public boolean dispatchNestedFling(float velocityX, float velocityY, boolean consumed) {
         boolean b = super.dispatchNestedFling(velocityX, velocityY, consumed);
@@ -124,6 +118,7 @@ public class RecyclerCardView extends RecyclerView implements ChildProximityList
     @Override
     public void notifyChildrenAboutProximity(boolean animate) {
         int count = getChildCount();
+        if (count == 0 || snapHelper == null) return;
         View centerView = snapHelper.findSnapView(getLayoutManager());
         if (centerView != null){
 
@@ -166,8 +161,8 @@ public class RecyclerCardView extends RecyclerView implements ChildProximityList
         public abstract void bindData(T data);
 
         protected void onCenterProximity(boolean isCentralItem, boolean animate) {
-            if(this instanceof RecyclerCardView.OnCenterProximityListener) {
-                RecyclerCardView.OnCenterProximityListener item = (RecyclerCardView.OnCenterProximityListener)this;
+            if(this instanceof OnCenterProximityListener) {
+                OnCenterProximityListener item = (OnCenterProximityListener)this;
                 if(isCentralItem) {
                     item.onCenterPosition(animate);
                 } else {

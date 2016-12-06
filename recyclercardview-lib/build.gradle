@@ -36,7 +36,7 @@ publish {
     userOrg = 'zking'
     groupId = 'com.vivifarm.view'
     artifactId = 'RecyclerCardView'
-    publishVersion = '1.2.0'
+    publishVersion = '1.4.0'
     desc = 'A vertical/horizonal list with one item on center and others evenly distributed up and down.'
     website = 'https://github.com/zuoweitan/RecyclerCardView'
 }

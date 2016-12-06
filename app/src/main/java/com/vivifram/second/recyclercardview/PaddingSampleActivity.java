@@ -3,12 +3,11 @@ package com.vivifram.second.recyclercardview;
 import android.app.Activity;
 import android.os.Bundle;
 import android.support.v7.widget.RecyclerView;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.TextView;
 
 import com.vivifram.second.recyclercardview_lib.layoutmanager.PaddingLayoutManager;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 项目名称：RecyclerCardView
@@ -20,51 +19,32 @@ import com.vivifram.second.recyclercardview_lib.layoutmanager.PaddingLayoutManag
  * 修改备注：
  */
 public class PaddingSampleActivity extends Activity {
+
+    private List<CardItem> list = new ArrayList<>();
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_padding_sample);
 
-        //
+        //init
         RecyclerView recyclerView = (RecyclerView) findViewById(R.id.recyclerView);
 
-        PaddingLayoutManager layoutManager = new PaddingLayoutManager(this);
+        int visibled = 3;
+
+        PaddingLayoutManager layoutManager = new PaddingLayoutManager(this,visibled);
 
         recyclerView.setLayoutManager(layoutManager);
 
-        recyclerView.setAdapter(new PaddingAdapter());
-    }
-
-    class PaddingAdapter extends RecyclerView.Adapter<PaddingHolder>{
-
-
-        @Override
-        public PaddingHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.padding_item,parent,false);
-            return new PaddingHolder(v);
+        for (int i = 0; i < 10; i++) {
+            list.add(new CardItem().setResId(R.drawable.lufei_2_1));
+            list.add(new CardItem().setResId(R.drawable.lufei_2));
+            list.add(new CardItem().setResId(R.drawable.lufei_2_3));
         }
 
-        @Override
-        public void onBindViewHolder(PaddingHolder holder, int position) {
-            holder.setText(position+"");
-        }
+        PaddingSampleAdapter paddingSampleAdapter = new PaddingSampleAdapter().setList(list);
 
-        @Override
-        public int getItemCount() {
-            return 100;
-        }
-    }
+        paddingSampleAdapter.setAnimate(visibled % 2 != 0);
 
-    class PaddingHolder extends RecyclerView.ViewHolder{
-        TextView textView;
-        public PaddingHolder(View itemView) {
-            super(itemView);
-
-            textView = (TextView) itemView.findViewById(R.id.tv);
-        }
-
-        public void setText(String text){
-            textView.setText(text);
-        }
+        recyclerView.setAdapter(paddingSampleAdapter);
     }
 }
