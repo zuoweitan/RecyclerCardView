@@ -5,9 +5,9 @@ both to support auto animate a item to center.
 A vertical LayoutManager only layout specified items with the some Gap.
 
 ### Demo
-[](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p1.gif)
-[](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p2.gif)
-[](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p3.gif)
+![](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p1.gif)
+![](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p2.gif)
+![](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p3.gif)
 
 # RecyclerCardView
 A vertical/horizonal list with one item on center and others evenly distributed up and down.
