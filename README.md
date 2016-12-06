@@ -4,6 +4,15 @@ both to support auto animate a item to center.
 # PaddingLayoutManager
 A vertical LayoutManager only layout specified items with the some Gap.
 
+## Usage
+```java
+PaddingLayoutManager layoutManager = new PaddingLayoutManager(this,visibled);
+```
+****if you want run animation to your centerview,you just make you ViewHolder implements OnCenterProximityListener,just like this:****
+```java
+class SimpleCardHolder extends RecyclerCardView.ViewHolder implements OnCenterProximityListener{...}
+```
+
 ### Demo
 ![](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p1.gif)
 ![](https://github.com/zuoweitan/RecyclerCardView/blob/master/art/p2.gif)
